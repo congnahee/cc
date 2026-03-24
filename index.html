@@ -1184,6 +1184,30 @@ function applySnap(snap) {
     }
   } catch(e) { console.warn('applySnap 오류:', e.message); }
 }
+      const img = new Image();
+      img.onload = () => {
+        bgImg = img;
+        currentBgDataUrl = snap.bgImgUrl;
+        restoreCalliCaches(() => {
+          refreshLayerList(); renderProps(); render();
+        });
+      };
+      img.onerror = () => {
+        bgImg = null;
+        restoreCalliCaches(() => {
+          refreshLayerList(); renderProps(); render();
+        });
+      };
+      img.src = snap.bgImgUrl;
+    } else {
+      bgImg = null;
+      currentBgDataUrl = null;
+      restoreCalliCaches(() => {
+        refreshLayerList(); renderProps(); render();
+      });
+    }
+  } catch(e) { console.warn('applySnap 오류:', e.message); }
+}
 function undoCanvas() {
   if (undoStack.length === 0) { showToast('더 이상 되돌릴 수 없어요'); return; }
   try {
@@ -3987,10 +4011,25 @@ function loadWork(work) {
 }
 
 function restoreCalliCaches(cb) {
-  const calliLayers = layers.filter(l => l.type === 'calli' && l.srcDataUrl);
-  let remaining = calliLayers.length;
-  if (remaining === 0) { cb(); return; }
+  // srcDataUrl 있는 레이어만 복원 (없는 건 이미 calliCache에 있거나 복원 불가)
+  const calliLayers = layers.filter(l => l.type === 'calli');
+  let remaining = calliLayers.filter(l => l.srcDataUrl).length;
+
+  if (remaining === 0) {
+    // srcDataUrl 없어도 srcImg가 있으면 바로 processCalliLayer
+    calliLayers.forEach(l => {
+      if (l.srcImg) processCalliLayer(l.id);
+    });
+    cb();
+    return;
+  }
+
   calliLayers.forEach(l => {
+    if (!l.srcDataUrl) {
+      // srcImg 있으면 바로 처리
+      if (l.srcImg) processCalliLayer(l.id);
+      return;
+    }
     const img = new Image();
     img.onload = () => {
       l.srcImg = img;
