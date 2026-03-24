@@ -1158,29 +1158,31 @@ function applySnap(snap) {
     calliCache = {};
     selId = null;
 
+    const finish = () => {
+      refreshLayerList();
+      renderProps();
+      render();
+      // 캘리 캐시 복원 후 한 번 더 렌더 (지연 로드 대응)
+      setTimeout(() => render(), 100);
+    };
+
     // 배경이미지 복원
     if (snap.bgImgUrl) {
       const img = new Image();
       img.onload = () => {
         bgImg = img;
         currentBgDataUrl = snap.bgImgUrl;
-        restoreCalliCaches(() => {
-          refreshLayerList(); renderProps(); render();
-        });
+        restoreCalliCaches(finish);
       };
       img.onerror = () => {
         bgImg = null;
-        restoreCalliCaches(() => {
-          refreshLayerList(); renderProps(); render();
-        });
+        restoreCalliCaches(finish);
       };
       img.src = snap.bgImgUrl;
     } else {
       bgImg = null;
       currentBgDataUrl = null;
-      restoreCalliCaches(() => {
-        refreshLayerList(); renderProps(); render();
-      });
+      restoreCalliCaches(finish);
     }
   } catch(e) { console.warn('applySnap 오류:', e.message); }
 }
@@ -4011,25 +4013,18 @@ function loadWork(work) {
 }
 
 function restoreCalliCaches(cb) {
-  // srcDataUrl 있는 레이어만 복원 (없는 건 이미 calliCache에 있거나 복원 불가)
   const calliLayers = layers.filter(l => l.type === 'calli');
-  let remaining = calliLayers.filter(l => l.srcDataUrl).length;
+  const withUrl = calliLayers.filter(l => l.srcDataUrl);
+  let remaining = withUrl.length;
 
-  if (remaining === 0) {
-    // srcDataUrl 없어도 srcImg가 있으면 바로 processCalliLayer
-    calliLayers.forEach(l => {
-      if (l.srcImg) processCalliLayer(l.id);
-    });
-    cb();
-    return;
-  }
-
+  // srcDataUrl 없는 캘리는 srcImg로 직접 처리
   calliLayers.forEach(l => {
-    if (!l.srcDataUrl) {
-      // srcImg 있으면 바로 처리
-      if (l.srcImg) processCalliLayer(l.id);
-      return;
-    }
+    if (!l.srcDataUrl && l.srcImg) processCalliLayer(l.id);
+  });
+
+  if (remaining === 0) { cb(); return; }
+
+  withUrl.forEach(l => {
     const img = new Image();
     img.onload = () => {
       l.srcImg = img;
