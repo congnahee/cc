@@ -1158,67 +1158,41 @@ function applySnap(snap) {
     calliCache = {};
     selId = null;
 
-    const finish = () => {
-      // calliCache가 비어있는 캘리 레이어 강제 처리
-      layers.forEach(l => {
-        if (l.type === 'calli' && !calliCache[l.id]) {
-          if (l.srcImg) {
-            processCalliLayer(l.id);
-          } else if (l.srcDataUrl) {
-            const img2 = new Image();
-            img2.onload = () => { l.srcImg = img2; processCalliLayer(l.id); render(); };
-            img2.src = l.srcDataUrl;
-          }
-        }
-      });
-      refreshLayerList();
-      renderProps();
-      render();
-      setTimeout(() => render(), 200);
+    const calliLayers = layers.filter(l => l.type === 'calli' && l.srcDataUrl);
+    // 배경 + 캘리 모두 로드 완료 후 render
+    let total = (snap.bgImgUrl ? 1 : 0) + calliLayers.length;
+    let done = 0;
+    const checkDone = () => {
+      done++;
+      if (done >= total) {
+        refreshLayerList(); renderProps(); render();
+      }
     };
 
-    // 배경이미지 복원
+    if (total === 0) {
+      bgImg = null; currentBgDataUrl = null;
+      refreshLayerList(); renderProps(); render();
+      return;
+    }
+
+    // 배경 복원
     if (snap.bgImgUrl) {
       const img = new Image();
-      img.onload = () => {
-        bgImg = img;
-        currentBgDataUrl = snap.bgImgUrl;
-        restoreCalliCaches(finish);
-      };
-      img.onerror = () => {
-        bgImg = null;
-        restoreCalliCaches(finish);
-      };
+      img.onload = () => { bgImg = img; currentBgDataUrl = snap.bgImgUrl; checkDone(); };
+      img.onerror = () => { bgImg = null; checkDone(); };
       img.src = snap.bgImgUrl;
     } else {
-      bgImg = null;
-      currentBgDataUrl = null;
-      restoreCalliCaches(finish);
+      bgImg = null; currentBgDataUrl = null;
     }
-  } catch(e) { console.warn('applySnap 오류:', e.message); }
-}
+
+    // 캘리 복원
+    calliLayers.forEach(l => {
       const img = new Image();
-      img.onload = () => {
-        bgImg = img;
-        currentBgDataUrl = snap.bgImgUrl;
-        restoreCalliCaches(() => {
-          refreshLayerList(); renderProps(); render();
-        });
-      };
-      img.onerror = () => {
-        bgImg = null;
-        restoreCalliCaches(() => {
-          refreshLayerList(); renderProps(); render();
-        });
-      };
-      img.src = snap.bgImgUrl;
-    } else {
-      bgImg = null;
-      currentBgDataUrl = null;
-      restoreCalliCaches(() => {
-        refreshLayerList(); renderProps(); render();
-      });
-    }
+      img.onload = () => { l.srcImg = img; processCalliLayer(l.id); checkDone(); };
+      img.onerror = () => { checkDone(); };
+      img.src = l.srcDataUrl;
+    });
+
   } catch(e) { console.warn('applySnap 오류:', e.message); }
 }
 function undoCanvas() {
